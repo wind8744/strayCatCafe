@@ -13,6 +13,8 @@ namespace StrayCatCafe
         [Range(0f, 100f)] public float Hunger = 20f;
         /// <summary>손님이 쓰다듬어 준 횟수 (도감 기록).</summary>
         public int Pets;
+        /// <summary>다친 것을 치료해서 데려온 아이.</summary>
+        public bool Rescued;
 
         public Species Species => SpeciesCatalog.All[SpeciesIndex];
 
@@ -34,12 +36,13 @@ namespace StrayCatCafe
             }
         }
 
-        public static Animal Create(Species species, System.Random rng) => new Animal
+        public static Animal Create(Species species, System.Random rng, bool rescued = false) => new Animal
         {
             SpeciesIndex = species.Index,
             Name = SpeciesCatalog.RandomName(rng),
             Happiness = 60f,
             Hunger = 30f,
+            Rescued = rescued,
         };
 
         /// <summary>시간이 흐르면 배가 고파지고, 굶으면 기분이 나빠집니다. cushion 은 방석 업그레이드.</summary>

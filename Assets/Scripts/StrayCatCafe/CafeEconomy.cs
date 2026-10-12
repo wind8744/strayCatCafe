@@ -6,6 +6,24 @@ namespace StrayCatCafe
 {
     public enum Upgrade { Sign, Cushion, Tower, Expansion }
 
+    public enum Staff { Barista, Caretaker }
+
+    public class StaffInfo
+    {
+        public readonly Staff Key;
+        public readonly string Name;
+        public readonly int Wage;
+        public readonly string Effect;
+
+        public StaffInfo(Staff key, string name, int wage, string effect)
+        {
+            Key = key;
+            Name = name;
+            Wage = wage;
+            Effect = effect;
+        }
+    }
+
     /// <summary>이야기 진행 단계. 집에서 시작해 첫 고양이를 얼떨결에 키우고, 아이들을 모아 카페를 엽니다.</summary>
     public enum StoryPhase { Intro, FirstCat, Collecting, CafeOpen }
 
@@ -30,7 +48,12 @@ namespace StrayCatCafe
         public int Day;
         public int Income;
         public int Visitors;
+        public int Orders;
         public int Tips;
+        /// <summary>주문을 못 받아 기다리다 돌아간 손님.</summary>
+        public int Lost;
+        public int Wages;
+        public int Rescued;
         public List<string> NewAnimals = new List<string>();
     }
 
@@ -43,7 +66,10 @@ namespace StrayCatCafe
         public int day;
         public int phase;
         public int kibble;
+        public int kits;
         public int[] snacks;
+        public bool[] hired;
+        public bool[] rescued;
         public bool[] upgrades;
         public bool[] seen;
         public List<Animal> animals;
@@ -53,7 +79,6 @@ namespace StrayCatCafe
     public class CafeEconomy
     {
         public const int StartingMoney = 20000;
-        public const int EntryFee = 3000;
         public const int TipPerAnimal = 500;
         public const int BaseCapacity = 6;
         public const int ExpansionCapacity = 4;
@@ -64,7 +89,14 @@ namespace StrayCatCafe
         public const int KibblePrice = 300;
         public const int KibbleBundle = 10;
         public const int BowlCapacity = 8;
-        public const int SaveVersion = 2;
+        public const int SaveVersion = 3;
+        public const int KitPrice = 2000;
+
+        public static readonly StaffInfo[] Staffs =
+        {
+            new StaffInfo(Staff.Barista, "바리스타 알바", 9000, "주문을 알아서 만들어 줍니다 (외출 중에도)"),
+            new StaffInfo(Staff.Caretaker, "돌봄 알바", 7000, "밥그릇을 채우고 아이들을 쓰다듬어 줍니다"),
+        };
 
         public static readonly UpgradeInfo[] Upgrades =
         {
@@ -80,6 +112,10 @@ namespace StrayCatCafe
         public bool CafeOpen => Phase == StoryPhase.CafeOpen;
         public bool CanOpenCafe => !CafeOpen && Animals.Count >= AnimalsToOpenCafe;
         public int Kibble { get; private set; } = 10;
+        public int Kits { get; private set; } = 1;
+        public bool[] Hired { get; } = new bool[Staffs.Length];
+        /// <summary>치료해서 데려온 적이 있는 품종.</summary>
+        public bool[] Rescued { get; } = new bool[SpeciesCatalog.All.Length];
         public int[] Snacks { get; } = new int[SnackCatalog.All.Length];
         public bool[] Owned { get; } = new bool[Upgrades.Length];
         public bool[] Seen { get; } = new bool[SpeciesCatalog.All.Length];
@@ -94,6 +130,55 @@ namespace StrayCatCafe
         }
 
         public bool Has(Upgrade u) => Owned[(int)u];
+        public bool Has(Staff s) => Hired[(int)s];
+
+        public int DailyWages
+        {
+            get
+            {
+                int w = 0;
+                for (int i = 0; i < Staffs.Length; i++) if (Hired[i]) w += Staffs[i].Wage;
+                return w;
+            }
+        }
+
+        /// <summary>고용·해고를 바꿉니다. 일당은 하루가 끝날 때 빠져나갑니다.</summary>
+        public void ToggleHire(Staff s) => Hired[(int)s] = !Hired[(int)s];
+
+        public bool TryBuyKit()
+        {
+            if (Money < KitPrice) return false;
+            Money -= KitPrice;
+            Kits++;
+            return true;
+        }
+
+        public bool UseKit()
+        {
+            if (Kits <= 0) return false;
+            Kits--;
+            return true;
+        }
+
+        /// <summary>주문한 커피·간식 값을 받습니다.</summary>
+        public int PayOrder(MenuItem item)
+        {
+            Money += item.Price;
+            Report.Income += item.Price;
+            Report.Orders++;
+            return item.Price;
+        }
+
+        public void LoseCustomer() => Report.Lost++;
+
+        /// <summary>하루 끝: 알바 일당을 지급합니다. 돈이 모자라면 있는 만큼만 나갑니다.</summary>
+        public int PayWages()
+        {
+            int wages = Mathf.Min(Money, DailyWages);
+            Money -= wages;
+            Report.Wages = wages;
+            return wages;
+        }
         public int Capacity => CafeOpen ? BaseCapacity + (Has(Upgrade.Expansion) ? ExpansionCapacity : 0) : HomeCapacity;
 
         public void Advance(StoryPhase phase)
@@ -183,19 +268,24 @@ namespace StrayCatCafe
         {
             Animals.Add(animal);
             Seen[animal.SpeciesIndex] = true;
-            Report.NewAnimals.Add($"{animal.Name} ({animal.Species.Name})");
+            if (animal.Rescued)
+            {
+                Rescued[animal.SpeciesIndex] = true;
+                Report.Rescued++;
+            }
+            Report.NewAnimals.Add(animal.Rescued ? $"{animal.Name} ({animal.Species.Name}, 치료)" : $"{animal.Name} ({animal.Species.Name})");
         }
 
         public void Spot(Species species) => Seen[species.Index] = true;
 
-        /// <summary>손님이 나가며 내는 돈. 입장료 + 좋아하는 종류 마리수만큼 팁.</summary>
-        public int Pay(int tip)
+        /// <summary>손님이 나가며 두고 가는 팁. 좋아하는 종류의 아이가 기분 좋게 있을수록 많습니다.</summary>
+        public int PayTip(int tip)
         {
-            Money += EntryFee + tip;
-            Report.Income += EntryFee + tip;
+            Money += tip;
+            Report.Income += tip;
             Report.Tips += tip;
             Report.Visitors++;
-            return EntryFee + tip;
+            return tip;
         }
 
         public void NextDay()
@@ -213,7 +303,10 @@ namespace StrayCatCafe
                 day = Day,
                 phase = (int)Phase,
                 kibble = Kibble,
+                kits = Kits,
                 snacks = (int[])Snacks.Clone(),
+                hired = (bool[])Hired.Clone(),
+                rescued = (bool[])Rescued.Clone(),
                 upgrades = (bool[])Owned.Clone(),
                 seen = (bool[])Seen.Clone(),
                 animals = new List<Animal>(Animals),
@@ -234,11 +327,14 @@ namespace StrayCatCafe
             eco.Day = Mathf.Max(1, data.day);
             eco.Phase = (StoryPhase)Mathf.Clamp(data.phase, 0, (int)StoryPhase.CafeOpen);
             eco.Kibble = data.kibble;
+            eco.Kits = data.version >= 3 ? data.kits : 1;
             eco.Report = new DayReport { Day = eco.Day };
             Array.Clear(eco.Snacks, 0, eco.Snacks.Length);
             if (data.snacks != null) Array.Copy(data.snacks, eco.Snacks, Mathf.Min(data.snacks.Length, eco.Snacks.Length));
             if (data.upgrades != null) Array.Copy(data.upgrades, eco.Owned, Mathf.Min(data.upgrades.Length, eco.Owned.Length));
             if (data.seen != null) Array.Copy(data.seen, eco.Seen, Mathf.Min(data.seen.Length, eco.Seen.Length));
+            if (data.hired != null) Array.Copy(data.hired, eco.Hired, Mathf.Min(data.hired.Length, eco.Hired.Length));
+            if (data.rescued != null) Array.Copy(data.rescued, eco.Rescued, Mathf.Min(data.rescued.Length, eco.Rescued.Length));
             if (data.animals != null)
             {
                 foreach (Animal a in data.animals)

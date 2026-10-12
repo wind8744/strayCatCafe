@@ -16,7 +16,7 @@ namespace StrayCatCafe
         public Vector2 Position => transform.position;
 
         private AnimalSprites _frames;
-        private SpriteRenderer _sr, _bubble;
+        private SpriteRenderer _sr, _bubble, _bandage;
         private Sprite _alert, _heart;
         private TownMap _map;
         private Vector2 _home;
@@ -25,8 +25,10 @@ namespace StrayCatCafe
         private bool _moving;
         private float _dirX;
 
+        public bool Injured => Encounter.Injured;
+
         public void Setup(Species species, Encounter encounter, AnimalSprites frames, TownMap map, Vector2Int spot,
-            Sprite alert, Sprite heart)
+            Sprite alert, Sprite heart, Sprite bandage = null)
         {
             Species = species;
             Encounter = encounter;
@@ -44,6 +46,14 @@ namespace StrayCatCafe
             _bubble = bubble.AddComponent<SpriteRenderer>();
             _bubble.enabled = false;
             _timer = 2f;
+            if (encounter.WasInjured && bandage != null)
+            {
+                var band = new GameObject("Bandage");
+                band.transform.SetParent(transform, false);
+                band.transform.localPosition = new Vector3(0.1f, 0.35f, 0f);
+                _bandage = band.AddComponent<SpriteRenderer>();
+                _bandage.sprite = bandage;
+            }
         }
 
         public void StartFollowing()
@@ -121,7 +131,8 @@ namespace StrayCatCafe
                     break;
             }
 
-            if (Current == State.Hiding && Encounter.Bond <= 0f && !_moving) _sr.sprite = Species.Personality == Personality.Lazy ? _frames.Sleep : _frames.Idle;
+            if (Current == State.Hiding && Injured) _sr.sprite = _frames.Sleep;
+            else if (Current == State.Hiding && Encounter.Bond <= 0f && !_moving) _sr.sprite = Species.Personality == Personality.Lazy ? _frames.Sleep : _frames.Idle;
             else if (_moving)
             {
                 _animTime += dt * 8f;
@@ -131,6 +142,11 @@ namespace StrayCatCafe
             if (Mathf.Abs(_dirX) > 0.01f) _sr.flipX = _dirX > 0f;
             _sr.sortingOrder = CharacterView.SortOrder(transform.position.y);
             _bubble.sortingOrder = _sr.sortingOrder + 1;
+            if (_bandage != null)
+            {
+                _bandage.sortingOrder = _sr.sortingOrder + 1;
+                _bandage.transform.localPosition = new Vector3(_sr.flipX ? -0.1f : 0.1f, Injured ? 0.35f : 0.5f, 0f);
+            }
 
             if (_bubbleTimer > 0f)
             {

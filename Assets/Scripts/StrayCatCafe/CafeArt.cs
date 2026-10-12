@@ -40,7 +40,10 @@ namespace StrayCatCafe
         public Sprite Zzz { get; }
         public Sprite Shadow { get; }
         public Sprite Daylight { get; }
+        public Sprite Bandage { get; }
         public CharacterSprites Player { get; }
+        public CharacterSprites Barista { get; }
+        public CharacterSprites Caretaker { get; }
 
         public CafeArt()
         {
@@ -57,8 +60,13 @@ namespace StrayCatCafe
             Zzz = BuildZzz();
             Shadow = BuildShadow();
             Daylight = BuildSolid(new Color32(255, 255, 255, 255));
+            Bandage = BuildBandage();
             Player = BuildCharacter(new Color32(250, 220, 190, 255), new Color32(90, 60, 50, 255),
                 new Color32(250, 250, 250, 255), new Color32(70, 90, 140, 255), new Color32(240, 160, 170, 255));
+            Barista = BuildCharacter(new Color32(240, 205, 175, 255), new Color32(40, 30, 30, 255),
+                new Color32(250, 250, 250, 255), new Color32(50, 50, 60, 255), new Color32(120, 80, 50, 255));
+            Caretaker = BuildCharacter(new Color32(232, 190, 150, 255), new Color32(220, 180, 90, 255),
+                new Color32(250, 250, 250, 255), new Color32(90, 70, 60, 255), new Color32(110, 180, 120, 255));
         }
 
         public Sprite CafeTile(char c) => _cafeTiles.TryGetValue(c, out Sprite s) ? s : _cafeTiles['.'];
@@ -380,6 +388,15 @@ namespace StrayCatCafe
             cv.Rect(0, 6, 4, 1, blue); cv.Set(2, 7, blue); cv.Set(1, 8, blue); cv.Rect(0, 9, 4, 1, blue);
             cv.Rect(5, 0, 5, 1, blue); cv.Set(8, 1, blue); cv.Set(7, 2, blue); cv.Set(6, 3, blue); cv.Rect(5, 4, 5, 1, blue);
             return cv.ToSprite(new Vector2(0.5f, 0f));
+        }
+
+        private static Sprite BuildBandage()
+        {
+            var cv = new PixelCanvas(7, 7);
+            cv.Rect(0, 0, 7, 7, C(250, 250, 250));
+            cv.Rect(3, 1, 1, 5, C(230, 70, 80));
+            cv.Rect(1, 3, 5, 1, C(230, 70, 80));
+            return cv.ToSprite(new Vector2(0.5f, 0.5f));
         }
 
         private static Sprite BuildShadow()

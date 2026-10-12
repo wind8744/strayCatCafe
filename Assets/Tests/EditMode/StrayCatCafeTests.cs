@@ -41,6 +41,20 @@ namespace StrayCatCafe.Tests
         }
 
         [Test]
+        public void QueueSpots_AreInFrontOfCounterAndReachable()
+        {
+            Assert.AreEqual(6, _map.QueueSpots.Count);
+            foreach (Vector2Int q in _map.QueueSpots)
+            {
+                Assert.IsTrue(_map.IsWalkable(q), q.ToString());
+                Assert.IsNotNull(_map.FindPath(_map.Spawn, q), q.ToString());
+            }
+            Assert.IsTrue(CafeMap.Adjacent(_map.QueueSpots[0], _map.Counter[0]), "앞줄은 카운터 바로 앞");
+            Assert.IsTrue(_map.IsWalkable(_map.BaristaSpot));
+            Assert.IsTrue(_map.IsNextToCounter(_map.BaristaSpot));
+        }
+
+        [Test]
         public void FindPath_ReachesEverySeatBedAndBowlFromDoor()
         {
             var goals = new List<Vector2Int>(_map.Seats);
@@ -235,6 +249,26 @@ namespace StrayCatCafe.Tests
         }
 
         [Test]
+        public void Injured_NeedsTreatmentThenBondsQuickly()
+        {
+            var e = new Encounter(Find("고등어"), new System.Random(5), injured: true);
+            Assert.IsTrue(e.Injured);
+            Assert.IsTrue(e.WasInjured);
+            Assert.AreEqual(0f, e.Wariness, "다친 아이는 경계하지 않는다");
+            e.Observe(0.5f, false, 30f);
+            Assert.IsFalse(e.Fled, "다친 아이는 도망가지 못한다");
+            Assert.AreEqual(Encounter.Result.NeedsTreatment, e.Offer(SnackCatalog.All[2]));
+            Assert.AreEqual(0f, e.Bond);
+
+            Assert.IsTrue(e.Treat());
+            Assert.IsFalse(e.Injured);
+            Assert.IsTrue(e.WasInjured);
+            Assert.AreEqual(60f, e.Bond);
+            Assert.IsFalse(e.Treat(), "두 번 치료할 필요 없음");
+            Assert.AreEqual(Encounter.Result.Bonded, e.Offer(SnackCatalog.All[2]));
+        }
+
+        [Test]
         public void Sneaking_LowersWariness()
         {
             var e = new Encounter(Find("고등어"), new System.Random(5));
@@ -288,7 +322,7 @@ namespace StrayCatCafe.Tests
             eco.TryBuyUpgrade(Upgrade.Sign);
             eco.Adopt(Animal.Create(SpeciesCatalog.All[6], rng));
             eco.Animals[0].Happiness = 42f;
-            eco.Pay(500);
+            eco.PayTip(500);
             eco.NextDay();
 
             CafeEconomy loaded = CafeEconomy.FromJson(eco.ToJson());
@@ -343,6 +377,61 @@ namespace StrayCatCafe.Tests
             CafeEconomy loaded = CafeEconomy.FromJson(json);
             Assert.AreEqual(StoryPhase.CafeOpen, loaded.Phase);
             Assert.AreEqual(StoryPhase.Intro, CafeEconomy.FromJson(eco.ToJson()).Phase, "새 형식 저장은 단계를 그대로 둔다");
+        }
+
+        [Test]
+        public void Orders_StaffAndKits_WorkAndRoundTrip()
+        {
+            var eco = new CafeEconomy();
+            int start = eco.Money;
+            MenuItem latte = MenuCatalog.All[1];
+            Assert.AreEqual(latte.Price, eco.PayOrder(latte));
+            Assert.AreEqual(start + latte.Price, eco.Money);
+            Assert.AreEqual(1, eco.Report.Orders);
+            eco.PayTip(1000);
+            Assert.AreEqual(1, eco.Report.Visitors);
+            Assert.AreEqual(latte.Price + 1000, eco.Report.Income);
+            eco.LoseCustomer();
+            Assert.AreEqual(1, eco.Report.Lost);
+
+            Assert.AreEqual(0, eco.DailyWages);
+            eco.ToggleHire(Staff.Barista);
+            Assert.IsTrue(eco.Has(Staff.Barista));
+            Assert.AreEqual(CafeEconomy.Staffs[0].Wage, eco.DailyWages);
+            int before = eco.Money;
+            Assert.AreEqual(CafeEconomy.Staffs[0].Wage, eco.PayWages());
+            Assert.AreEqual(before - CafeEconomy.Staffs[0].Wage, eco.Money);
+            Assert.AreEqual(CafeEconomy.Staffs[0].Wage, eco.Report.Wages);
+
+            Assert.AreEqual(1, eco.Kits);
+            Assert.IsTrue(eco.UseKit());
+            Assert.IsFalse(eco.UseKit());
+            Assert.IsTrue(eco.TryBuyKit());
+            Assert.AreEqual(1, eco.Kits);
+
+            var rescued = Animal.Create(SpeciesCatalog.All[2], new System.Random(1), rescued: true);
+            eco.Adopt(rescued);
+            Assert.IsTrue(eco.Rescued[2]);
+            Assert.AreEqual(1, eco.Report.Rescued);
+
+            CafeEconomy loaded = CafeEconomy.FromJson(eco.ToJson());
+            Assert.IsTrue(loaded.Has(Staff.Barista));
+            Assert.AreEqual(1, loaded.Kits);
+            Assert.IsTrue(loaded.Rescued[2]);
+            Assert.IsTrue(loaded.Animals[0].Rescued);
+        }
+
+        [Test]
+        public void Menu_HasDrinksAndSnacksWithPrices()
+        {
+            bool drink = false, snack = false;
+            for (int i = 0; i < MenuCatalog.All.Length; i++)
+            {
+                Assert.AreEqual(i, MenuCatalog.All[i].Index);
+                Assert.Greater(MenuCatalog.All[i].Price, 0);
+                if (MenuCatalog.All[i].Drink) drink = true; else snack = true;
+            }
+            Assert.IsTrue(drink && snack);
         }
 
         [Test]

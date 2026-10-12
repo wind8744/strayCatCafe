@@ -9,7 +9,7 @@ namespace StrayCatCafe
     /// </summary>
     public class Encounter
     {
-        public enum Result { Progress, Bonded, Fled }
+        public enum Result { Progress, Bonded, Fled, NeedsTreatment }
 
         public const float BondGoal = 100f;
         /// <summary>이 거리(칸) 안에서는 주인의 움직임이 경계심에 영향을 줍니다.</summary>
@@ -19,17 +19,32 @@ namespace StrayCatCafe
         private readonly System.Random _rng;
 
         public Species Species { get; }
+        /// <summary>다친 아이는 도망가지 못하지만, 치료해 주기 전엔 간식도 받지 않습니다.</summary>
+        public bool Injured { get; private set; }
+        public bool WasInjured { get; }
         public float Wariness { get; private set; }
         public float Bond { get; private set; }
         public bool Fled { get; private set; }
         public bool Bonded => Bond >= BondGoal;
         public bool Over => Fled || Bonded;
 
-        public Encounter(Species species, System.Random rng)
+        public Encounter(Species species, System.Random rng, bool injured = false)
         {
             Species = species;
             _rng = rng;
-            Wariness = InitialWariness(species.Personality);
+            Injured = injured;
+            WasInjured = injured;
+            Wariness = injured ? 0f : InitialWariness(species.Personality);
+        }
+
+        /// <summary>구급상자로 치료합니다. 고마워서 마음을 많이 열고 경계심이 사라집니다.</summary>
+        public bool Treat()
+        {
+            if (!Injured) return false;
+            Injured = false;
+            Bond = Mathf.Max(Bond, 60f);
+            Wariness = 0f;
+            return true;
         }
 
         public static float InitialWariness(Personality personality) => personality switch
@@ -43,7 +58,7 @@ namespace StrayCatCafe
         /// <summary>매 프레임 주인과의 거리와 살금살금 여부를 알려 줍니다.</summary>
         public void Observe(float distance, bool sneaking, float dt)
         {
-            if (Over) return;
+            if (Over || Injured) return;
             float rate;
             if (distance < ThreatRadius)
             {
@@ -72,6 +87,7 @@ namespace StrayCatCafe
         {
             if (Fled) return Result.Fled;
             if (Bonded) return Result.Bonded;
+            if (Injured) return Result.NeedsTreatment;
 
             Bond = Mathf.Min(BondGoal, Bond + BondGain(snack));
             Wariness = Mathf.Max(0f, Wariness - 0.3f);

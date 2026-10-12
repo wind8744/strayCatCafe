@@ -42,6 +42,10 @@ namespace StrayCatCafe
         public List<Vector2Int> Seats { get; } = new List<Vector2Int>();
         public List<Vector2Int> Beds { get; } = new List<Vector2Int>();
         public List<Vector2Int> Counter { get; } = new List<Vector2Int>();
+        /// <summary>주문을 기다리는 손님이 서는 칸. 앞줄은 카운터 바로 앞, 뒷줄은 그 아래.</summary>
+        public List<Vector2Int> QueueSpots { get; } = new List<Vector2Int>();
+        /// <summary>바리스타가 서는 카운터 뒤 칸.</summary>
+        public Vector2Int BaristaSpot => Counter.Count > 0 ? Counter[Counter.Count / 2] + Vector2Int.up : Spawn;
         public List<Vector2Int> Doors { get; } = new List<Vector2Int>();
         /// <summary>동물이 어슬렁거릴 수 있는 바닥 칸.</summary>
         public List<Vector2Int> Floor { get; } = new List<Vector2Int>();
@@ -73,6 +77,8 @@ namespace StrayCatCafe
                     }
                 }
             }
+            foreach (Vector2Int c in Counter) if (IsWalkable(c + Vector2Int.down)) QueueSpots.Add(c + Vector2Int.down);
+            foreach (Vector2Int c in Counter) if (IsWalkable(c + Vector2Int.down * 2)) QueueSpots.Add(c + Vector2Int.down * 2);
         }
 
         public override char TileAt(int x, int y)
