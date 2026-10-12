@@ -6,6 +6,9 @@ namespace StrayCatCafe
 {
     public enum Upgrade { Sign, Cushion, Tower, Expansion }
 
+    /// <summary>이야기 진행 단계. 집에서 시작해 첫 고양이를 얼떨결에 키우고, 아이들을 모아 카페를 엽니다.</summary>
+    public enum StoryPhase { Intro, FirstCat, Collecting, CafeOpen }
+
     public class UpgradeInfo
     {
         public readonly Upgrade Key;
@@ -34,8 +37,11 @@ namespace StrayCatCafe
     [Serializable]
     public class SaveData
     {
+        /// <summary>0 = 이야기 단계가 생기기 전 저장. 그 경우 식구가 있으면 카페를 운영 중이던 것으로 봅니다.</summary>
+        public int version;
         public int money;
         public int day;
+        public int phase;
         public int kibble;
         public int[] snacks;
         public bool[] upgrades;
@@ -51,9 +57,14 @@ namespace StrayCatCafe
         public const int TipPerAnimal = 500;
         public const int BaseCapacity = 6;
         public const int ExpansionCapacity = 4;
+        /// <summary>카페를 열기 전 집에서 돌볼 수 있는 마리수.</summary>
+        public const int HomeCapacity = 3;
+        /// <summary>이만큼 모이면 빈 가게를 빌려 카페를 열 수 있습니다.</summary>
+        public const int AnimalsToOpenCafe = 3;
         public const int KibblePrice = 300;
         public const int KibbleBundle = 10;
         public const int BowlCapacity = 8;
+        public const int SaveVersion = 2;
 
         public static readonly UpgradeInfo[] Upgrades =
         {
@@ -65,6 +76,9 @@ namespace StrayCatCafe
 
         public int Money { get; private set; }
         public int Day { get; private set; } = 1;
+        public StoryPhase Phase { get; private set; } = StoryPhase.Intro;
+        public bool CafeOpen => Phase == StoryPhase.CafeOpen;
+        public bool CanOpenCafe => !CafeOpen && Animals.Count >= AnimalsToOpenCafe;
         public int Kibble { get; private set; } = 10;
         public int[] Snacks { get; } = new int[SnackCatalog.All.Length];
         public bool[] Owned { get; } = new bool[Upgrades.Length];
@@ -80,7 +94,19 @@ namespace StrayCatCafe
         }
 
         public bool Has(Upgrade u) => Owned[(int)u];
-        public int Capacity => BaseCapacity + (Has(Upgrade.Expansion) ? ExpansionCapacity : 0);
+        public int Capacity => CafeOpen ? BaseCapacity + (Has(Upgrade.Expansion) ? ExpansionCapacity : 0) : HomeCapacity;
+
+        public void Advance(StoryPhase phase)
+        {
+            if (phase > Phase) Phase = phase;
+        }
+
+        public bool TryOpenCafe()
+        {
+            if (!CanOpenCafe) return false;
+            Phase = StoryPhase.CafeOpen;
+            return true;
+        }
         public bool Full => Animals.Count >= Capacity;
         public int TotalSnacks { get { int n = 0; foreach (int s in Snacks) n += s; return n; } }
 
@@ -182,8 +208,10 @@ namespace StrayCatCafe
         {
             var data = new SaveData
             {
+                version = SaveVersion,
                 money = Money,
                 day = Day,
+                phase = (int)Phase,
                 kibble = Kibble,
                 snacks = (int[])Snacks.Clone(),
                 upgrades = (bool[])Owned.Clone(),
@@ -204,6 +232,7 @@ namespace StrayCatCafe
 
             eco.Money = data.money;
             eco.Day = Mathf.Max(1, data.day);
+            eco.Phase = (StoryPhase)Mathf.Clamp(data.phase, 0, (int)StoryPhase.CafeOpen);
             eco.Kibble = data.kibble;
             eco.Report = new DayReport { Day = eco.Day };
             Array.Clear(eco.Snacks, 0, eco.Snacks.Length);
@@ -218,6 +247,8 @@ namespace StrayCatCafe
                     eco.Animals.Add(a);
                 }
             }
+            // 단계가 생기기 전 저장: 식구가 있으면 이미 카페를 운영하던 것으로 봅니다.
+            if (data.version < 2 && eco.Animals.Count > 0) eco.Phase = StoryPhase.CafeOpen;
             return eco;
         }
     }

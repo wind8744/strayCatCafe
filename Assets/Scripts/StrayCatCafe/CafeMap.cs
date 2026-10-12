@@ -4,10 +4,25 @@ using UnityEngine;
 namespace StrayCatCafe
 {
     /// <summary>
-    /// 카페 안 배치도. # 벽, w 창문, . 바닥, D 문, k 카운터, c 손님 자리, b 밥그릇, t 캣타워, B 방석.
+    /// 실내 배치도 (카페·집 공용). # 벽, w 창문, . 바닥, r 러그, D 문, k 카운터·탁자, c 손님 자리, b 밥그릇, t 캣타워,
+    /// B 방석, h 사람 침대.
     /// </summary>
     public class CafeMap : TileGrid
     {
+        /// <summary>주인공의 집. 작은 방 하나에 침대·탁자·러그·방석·밥그릇이 있습니다.</summary>
+        public static readonly string[] HomeLayout =
+        {
+            "##############",
+            "#w....w.....w#",
+            "#hh.......kk.#",
+            "#hh.......kk.#",
+            "#....rrrr....#",
+            "#.B..rrrr..b.#",
+            "#............#",
+            "#............#",
+            "######DD######",
+        };
+
         public static readonly string[] DefaultLayout =
         {
             "##################",
@@ -32,6 +47,7 @@ namespace StrayCatCafe
         public List<Vector2Int> Floor { get; } = new List<Vector2Int>();
         public Vector2Int Bowl { get; private set; }
         public Vector2Int Tower { get; private set; }
+        public bool HasTower { get; private set; }
         /// <summary>문으로 들어온 사람이 처음 서는 칸.</summary>
         public Vector2Int Spawn => Doors[0] + Vector2Int.up;
 
@@ -51,8 +67,9 @@ namespace StrayCatCafe
                         case 'k': Counter.Add(p); break;
                         case 'D': Doors.Add(p); break;
                         case 'b': Bowl = p; break;
-                        case 't': Tower = p; break;
+                        case 't': Tower = p; HasTower = true; break;
                         case '.': if (y > 1) Floor.Add(p); break;
+                        case 'r': Floor.Add(p); break;
                     }
                 }
             }
@@ -67,7 +84,7 @@ namespace StrayCatCafe
         public override bool IsWalkable(Vector2Int p)
         {
             char t = TileAt(p.x, p.y);
-            return t == '.' || t == 'c' || t == 'B' || t == 'D';
+            return t == '.' || t == 'r' || t == 'c' || t == 'B' || t == 'D';
         }
 
         public bool IsDoor(Vector2Int p) => TileAt(p.x, p.y) == 'D';

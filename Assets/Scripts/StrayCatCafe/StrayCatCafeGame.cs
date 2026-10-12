@@ -4,9 +4,9 @@ using UnityEngine;
 namespace StrayCatCafe
 {
     /// <summary>
-    /// 길고양이 카페 진행 관리. 동네에서 길고양이·강아지와 친해져 데려오고, 카페에서 손님을 받아 돈을 벌고,
-    /// 간식·사료·업그레이드를 사며 가게를 키웁니다. 카페 안과 동네는 같은 씬의 떨어진 자리에 있고
-    /// 주인이 문을 드나들 때 카메라가 옮겨 갑니다. 씬에는 이 컴포넌트와 메인 카메라만 있으면 됩니다.
+    /// 길고양이 카페 진행 관리. 주인공의 집에서 시작해 첫 산책에서 고양이가 따라오고, 동네 풀숲·물가를 돌며
+    /// 아이들을 모아 빈 가게를 빌려 카페를 엽니다. 집·카페·동네는 같은 씬의 떨어진 자리에 있고
+    /// 문을 드나들 때 카메라가 옮겨 갑니다. 씬에는 이 컴포넌트와 메인 카메라만 있으면 됩니다.
     /// </summary>
     public class StrayCatCafeGame : MonoBehaviour
     {
@@ -23,10 +23,12 @@ namespace StrayCatCafe
         [Header("Cafe")]
         [SerializeField] private int _maxCustomers = 8;
 
+        private static readonly Vector2 HomeOrigin = new Vector2(0f, 40f);
         private static readonly Vector2 TownOrigin = new Vector2(100f, 0f);
 
         private enum State { Open, Closing, Summary }
         private enum Panel { None, Shop, Office, Collection }
+        private enum Place { Home, Cafe, Town }
 
         private struct FloatingText
         {
@@ -39,13 +41,14 @@ namespace StrayCatCafe
         private const string SaveKey = "StrayCatCafe.Save";
         private const float TextSeconds = 1.3f;
         private const float InteractRange = 1.7f;
+        private const int CollectionPerPage = 16;
         private static readonly Color Ink = new Color(0.3f, 0.19f, 0.15f);
         private static readonly Color Good = new Color(0.2f, 0.55f, 0.3f);
         private static readonly Color Bad = new Color(0.82f, 0.25f, 0.28f);
         private static readonly Color Gold = new Color(0.85f, 0.55f, 0.1f);
         private static readonly Color Love = new Color(0.9f, 0.35f, 0.45f);
 
-        private CafeMap _cafe;
+        private CafeMap _home, _cafe;
         private TownMap _town;
         private CafeArt _art;
         private CafeEconomy _eco;
@@ -56,7 +59,8 @@ namespace StrayCatCafe
         private GameObject _player;
         private CharacterView _playerView;
         private Vector2 _playerPos;
-        private bool _inTown, _sneaking;
+        private Place _place;
+        private bool _sneaking;
 
         private readonly List<AnimalView> _animals = new List<AnimalView>();
         private readonly List<Customer> _customers = new List<Customer>();
@@ -65,24 +69,31 @@ namespace StrayCatCafe
         private readonly List<FloatingText> _texts = new List<FloatingText>();
         private bool[] _seatTaken;
         private int _bowlFood;
-        private SpriteRenderer _bowlSprite, _towerSprite;
+        private SpriteRenderer _bowlSprite, _homeBowlSprite, _towerSprite;
 
         private State _state;
-        private float _hour, _customerTimer, _strayTimer;
+        private float _hour, _customerTimer, _strayTimer, _doorNagTimer;
         private int _seed;
         private Panel _panel;
         private int _cursor, _selectedSnack = 1, _collectionPage;
-        private const int CollectionPerPage = 16;
         private string _prompt, _banner;
         private float _bannerTimer;
         private GUIStyle _panelStyle, _labelStyle, _titleStyle, _floatStyle, _smallStyle;
 
         public CafeEconomy Economy => _eco;
 
+        private bool InTown => _place == Place.Town;
+        private CafeMap Interior => _place == Place.Home ? _home : _cafe;
+        private TileGrid Grid => InTown ? (TileGrid)_town : Interior;
+        /// <summary>식구들이 사는 곳. 카페를 열기 전엔 집입니다.</summary>
+        private CafeMap AnimalHome => _eco.CafeOpen ? _cafe : _home;
+        private Place AnimalPlace => _eco.CafeOpen ? Place.Cafe : Place.Home;
+
         // ---------- 시작 ----------
 
         private void Start()
         {
+            _home = new CafeMap(CafeMap.HomeLayout) { Origin = HomeOrigin };
             _cafe = new CafeMap();
             _town = new TownMap { Origin = TownOrigin };
             _art = new CafeArt();
@@ -93,10 +104,11 @@ namespace StrayCatCafe
             _bowlFood = 4;
 
             SetupCamera();
-            BuildCafe();
+            BuildInterior(_home, "Home", out _homeBowlSprite, out _);
+            BuildInterior(_cafe, "Cafe", out _bowlSprite, out _towerSprite);
             BuildTown();
             BuildPlayer();
-            foreach (Animal a in _eco.Animals) SpawnAnimalView(a, _cafe.Floor[_rng.Next(_cafe.Floor.Count)]);
+            foreach (Animal a in _eco.Animals) SpawnAnimalView(a, AnimalHome.Floor[_rng.Next(AnimalHome.Floor.Count)]);
             StartDay();
         }
 
@@ -126,23 +138,26 @@ namespace StrayCatCafe
             return sr;
         }
 
-        private void BuildCafe()
+        private void BuildInterior(CafeMap map, string name, out SpriteRenderer bowl, out SpriteRenderer tower)
         {
-            var root = new GameObject("Cafe").transform;
-            for (int y = 0; y < _cafe.Height; y++)
+            var root = new GameObject(name).transform;
+            for (int y = 0; y < map.Height; y++)
             {
-                for (int x = 0; x < _cafe.Width; x++)
+                for (int x = 0; x < map.Width; x++)
                 {
-                    char t = _cafe.TileAt(x, y);
-                    Vector2 pos = _cafe.Origin + new Vector2(x, y);
-                    MakeSprite(root, $"Tile {x},{y}", _art.CafeTile(t), pos, -5000);
+                    Vector2 pos = map.Origin + new Vector2(x, y);
+                    MakeSprite(root, $"Tile {x},{y}", _art.CafeTile(map.TileAt(x, y)), pos, -5000);
                 }
             }
-            Vector2 towerPos = _cafe.Origin + new Vector2(_cafe.Tower.x + 0.5f, _cafe.Tower.y + 0.1f);
-            _towerSprite = MakeSprite(root, "CatTower", _eco.Has(Upgrade.Tower) ? _art.BigCatTower : _art.CatTower, towerPos,
-                CharacterView.SortOrder(towerPos.y));
-            Vector2 bowlPos = _cafe.Origin + new Vector2(_cafe.Bowl.x + 0.5f, _cafe.Bowl.y + 0.3f);
-            _bowlSprite = MakeSprite(root, "Bowl", _art.BowlFull, bowlPos, CharacterView.SortOrder(bowlPos.y));
+            tower = null;
+            if (map.HasTower)
+            {
+                Vector2 towerPos = map.Origin + new Vector2(map.Tower.x + 0.5f, map.Tower.y + 0.1f);
+                tower = MakeSprite(root, "CatTower", _eco.Has(Upgrade.Tower) ? _art.BigCatTower : _art.CatTower, towerPos,
+                    CharacterView.SortOrder(towerPos.y));
+            }
+            Vector2 bowlPos = map.Origin + new Vector2(map.Bowl.x + 0.5f, map.Bowl.y + 0.3f);
+            bowl = MakeSprite(root, "Bowl", _art.BowlFull, bowlPos, CharacterView.SortOrder(bowlPos.y));
         }
 
         private void BuildTown()
@@ -170,16 +185,17 @@ namespace StrayCatCafe
             _player = new GameObject("Owner");
             _playerView = _player.AddComponent<CharacterView>();
             _playerView.Setup(_art.Player);
-            _playerPos = _cafe.TileToWorld(_cafe.Spawn + Vector2Int.up);
+            // 카페를 운영 중이면 카페에서, 아니면 집에서 하루를 시작한다.
+            _place = AnimalPlace;
+            _playerPos = Interior.TileToWorld(Interior.Spawn + Vector2Int.up);
             _player.transform.position = _playerPos;
-            _inTown = false;
         }
 
         private AnimalView SpawnAnimalView(Animal data, Vector2Int tile)
         {
             var go = new GameObject($"Animal {data.Name}");
             var view = go.AddComponent<AnimalView>();
-            view.Setup(data, _art.Animal(data.Species), _cafe, tile, () => _bowlFood > 0, EatFromBowl,
+            view.Setup(data, _art.Animal(data.Species), AnimalHome, tile, () => _bowlFood > 0, EatFromBowl,
                 _art.Zzz, _art.Heart, _seed++);
             _animals.Add(view);
             return view;
@@ -203,7 +219,19 @@ namespace StrayCatCafe
             _strays.Clear();
             _followers.Clear();
             for (int i = 0; i < 3; i++) SpawnStray();
-            ShowBanner($"{_eco.Day}일째 아침. 길에서 아이들을 찾아 카페로 데려오세요!");
+            switch (_eco.Phase)
+            {
+                case StoryPhase.Intro:
+                case StoryPhase.FirstCat:
+                    ShowBanner("조용한 아침. 날씨도 좋은데 산책이나 나가 볼까? (아래 문으로 나가기)");
+                    break;
+                case StoryPhase.Collecting:
+                    ShowBanner($"{_eco.Day}일째. 풀숲·물가에서 친구를 찾아요. 카페 열기까지 {Mathf.Max(0, CafeEconomy.AnimalsToOpenCafe - _eco.Animals.Count)}마리!");
+                    break;
+                default:
+                    ShowBanner($"{_eco.Day}일째 아침. 카페 문을 열고 아이들을 돌보세요!");
+                    break;
+            }
         }
 
         // ---------- 매 프레임 ----------
@@ -214,6 +242,7 @@ namespace StrayCatCafe
             float dt = Time.deltaTime;
             if (Input.GetKeyDown(KeyCode.M)) _audio.ToggleMusic();
             if (_bannerTimer > 0f) _bannerTimer -= dt;
+            if (_doorNagTimer > 0f) _doorNagTimer -= dt;
             UpdateTexts(dt);
 
             if (_state == State.Summary)
@@ -226,8 +255,8 @@ namespace StrayCatCafe
             bool frozen = _panel != Panel.None;
             if (!frozen) UpdatePlayer(dt);
 
-            if (_inTown) UpdateTown(dt, frozen);
-            else UpdateCafe(dt, frozen);
+            if (InTown) UpdateTown(dt, frozen);
+            else UpdateInterior(dt, frozen);
 
             if (_state == State.Open)
             {
@@ -237,7 +266,7 @@ namespace StrayCatCafe
                     _state = State.Closing;
                     _panel = Panel.None;
                     foreach (Customer c in _customers) c.Leave();
-                    ShowBanner("영업 종료! 손님들이 돌아갑니다.");
+                    ShowBanner(_eco.CafeOpen ? "영업 종료! 손님들이 돌아갑니다." : "해가 졌어요. 오늘은 여기까지.");
                 }
             }
             else if (_state == State.Closing && _customers.Count == 0)
@@ -256,7 +285,7 @@ namespace StrayCatCafe
             if (Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S)) input.y -= 1f;
             if (Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W)) input.y += 1f;
             _sneaking = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-            TileGrid grid = _inTown ? (TileGrid)_town : _cafe;
+            TileGrid grid = Grid;
 
             float speed = _sneaking ? _sneakSpeed : _playerSpeed;
             Vector2 delta = input.normalized * speed * dt;
@@ -269,41 +298,117 @@ namespace StrayCatCafe
             _playerView.Animate(input.sqrMagnitude > 0f, input.x, dt);
 
             Vector2Int tile = grid.WorldToTile(_playerPos);
-            if (!_inTown && _cafe.IsDoor(tile) && input.y < 0f) GoToTown();
-            else if (_inTown && _town.IsCafeDoor(tile)) GoToCafe();
+            if (!InTown)
+            {
+                if (Interior.IsDoor(tile) && input.y < 0f) GoToTown(_place == Place.Home ? _town.HomeExitSpot : _town.ExitSpot);
+            }
+            else if (_town.IsHomeDoor(tile))
+            {
+                EnterInterior(Place.Home);
+            }
+            else if (_town.IsCafeDoor(tile))
+            {
+                if (_eco.CafeOpen) EnterInterior(Place.Cafe);
+                else TryCafeDoor();
+            }
         }
 
-        private void GoToTown()
+        private void GoToTown(Vector2Int spot)
         {
-            _inTown = true;
+            _place = Place.Town;
+            _playerPos = _town.TileToWorld(spot);
+            _player.transform.position = _playerPos;
+            if (_eco.Phase == StoryPhase.Intro) FirstWalk();
+            else if (_eco.Phase != StoryPhase.CafeOpen || _eco.Day == 1)
+                Float(_playerPos + Vector2.up * 1.6f, "덤불·나무·물가 근처를 살펴보세요 (Shift = 살금살금)", Ink);
+        }
+
+        /// <summary>첫 산책: 길을 가는데 웬 고양이가 졸졸 따라옵니다.</summary>
+        private void FirstWalk()
+        {
+            Species species = SpeciesCatalog.All[16]; // 코리안숏헤어
+            Vector2Int spot = _town.HomeExitSpot + Vector2Int.right * 3;
+            var go = new GameObject($"Stray {species.Name}");
+            var view = go.AddComponent<StrayView>();
+            view.Setup(species, new Encounter(species, _rng), _art.Animal(species), _town, spot, _art.Alert, _art.Heart);
+            view.StartFollowing();
+            _strays.Add(view);
+            _followers.Add(view);
+            _eco.Spot(species);
+            _eco.Advance(StoryPhase.FirstCat);
+            ShowBanner("어? 웬 고양이가 졸졸 따라오네… 집(왼쪽 위 문)으로 돌아가 볼까요?");
+            _audio.PlayVoice(AnimalKind.Cat);
+        }
+
+        private void TryCafeDoor()
+        {
+            if (_eco.CanOpenCafe)
+            {
+                _prompt = "Space: 빈 가게를 빌려 고양이 카페 열기!";
+                if (Input.GetKeyDown(KeyCode.Space))
+                {
+                    OpenCafe();
+                    return;
+                }
+            }
+            else if (_doorNagTimer <= 0f)
+            {
+                _doorNagTimer = 3f;
+                Float(_playerPos + Vector2.up * 1.6f,
+                    $"빈 가게예요. 아이들이 {CafeEconomy.AnimalsToOpenCafe}마리 모이면 카페를 열 수 있어요 (지금 {_eco.Animals.Count}마리)", Ink);
+            }
+            // 문 안으로는 못 들어가므로 한 칸 아래로 밀어낸다.
             _playerPos = _town.TileToWorld(_town.ExitSpot);
             _player.transform.position = _playerPos;
-            Float(_playerPos + Vector2.up * 1.6f, "덤불·나무 근처를 살펴보세요 (Shift = 살금살금)", Ink);
         }
 
-        private void GoToCafe()
+        private void OpenCafe()
         {
-            _inTown = false;
-            _playerPos = _cafe.TileToWorld(_cafe.Spawn);
+            if (!_eco.TryOpenCafe()) return;
+            foreach (AnimalView v in _animals) Destroy(v.gameObject);
+            _animals.Clear();
+            foreach (Animal a in _eco.Animals) SpawnAnimalView(a, _cafe.Floor[_rng.Next(_cafe.Floor.Count)]);
+            _audio.Play(_audio.DayEnd);
+            EnterInterior(Place.Cafe);
+            ShowBanner("고양이 카페 개업! 이제 손님이 찾아옵니다. 카운터 옆에서 운영 메뉴를 열 수 있어요.");
+            Save();
+        }
+
+        private void EnterInterior(Place place)
+        {
+            _place = place;
+            _playerPos = Interior.TileToWorld(Interior.Spawn);
             _player.transform.position = _playerPos;
-            AdoptFollowers();
+            if (place == AnimalPlace) AdoptFollowers();
+            else if (_followers.Count > 0)
+                Float(_playerPos + Vector2.up * 1.6f, $"따라온 아이는 {(AnimalPlace == Place.Home ? "집" : "카페")}에 데려가야 해요", Ink);
         }
 
         private void AdoptFollowers()
         {
+            bool firstCat = _eco.Phase == StoryPhase.FirstCat;
             foreach (StrayView s in _followers)
             {
                 if (s == null) continue;
                 Animal animal = Animal.Create(s.Species, _rng);
                 _eco.Adopt(animal);
-                SpawnAnimalView(animal, _cafe.Spawn + Vector2Int.up);
-                Float(_cafe.TileToWorld(_cafe.Spawn) + Vector2.up * 1.6f, $"{animal.Name}({s.Species.Name})이(가) 식구가 되었어요!", Love);
+                SpawnAnimalView(animal, Interior.Spawn + Vector2Int.up);
+                Float(Interior.TileToWorld(Interior.Spawn) + Vector2.up * 1.6f, $"{animal.Name}({s.Species.Name})이(가) 식구가 되었어요!", Love);
                 _strays.Remove(s);
                 Destroy(s.gameObject);
             }
             if (_followers.Count > 0)
             {
                 _audio.Play(_audio.Heart);
+                if (firstCat)
+                {
+                    _eco.Advance(StoryPhase.Collecting);
+                    ShowBanner($"얼떨결에 {_eco.Animals[0].Name}와(과) 같이 살게 됐어요! 풀숲·물가에서 친구를 더 찾아 {CafeEconomy.AnimalsToOpenCafe}마리가 되면 빈 가게를 빌려 카페를 열 수 있어요.");
+                }
+                else if (_eco.CanOpenCafe)
+                {
+                    ShowBanner($"{CafeEconomy.AnimalsToOpenCafe}마리가 모였어요! 동네 한가운데 빈 가게 문 앞에서 카페를 열 수 있어요.");
+                }
                 Save();
             }
             _followers.Clear();
@@ -382,13 +487,20 @@ namespace StrayCatCafe
             {
                 _prompt = _sneaking ? "살금살금 다가가세요…" : "Shift 를 누른 채 천천히 다가가세요";
             }
+            else if (_eco.Phase == StoryPhase.FirstCat)
+            {
+                _prompt = "고양이가 따라와요. 왼쪽 위 집 문으로 돌아가 보세요";
+            }
         }
 
         private void Offer(StrayView stray, Snack snack)
         {
             if (_eco.Full)
             {
-                Float(_playerPos + Vector2.up * 1.6f, $"카페가 꽉 찼어요 ({_eco.Capacity}마리). 가게 확장이 필요해요", Bad);
+                string why = _eco.CafeOpen
+                    ? $"카페가 꽉 찼어요 ({_eco.Capacity}마리). 가게 확장이 필요해요"
+                    : "집이 좁아요. 빈 가게에서 카페를 열면 더 데려올 수 있어요";
+                Float(_playerPos + Vector2.up * 1.6f, why, Bad);
                 _audio.Play(_audio.Deny);
                 return;
             }
@@ -407,7 +519,7 @@ namespace StrayCatCafe
                     stray.StartFollowing();
                     _followers.Add(stray);
                     _eco.Spot(stray.Species);
-                    Float(stray.Position + Vector2.up * 1.4f, $"{stray.Species.Name}이(가) 따라와요! 카페로 데려가세요", Love);
+                    Float(stray.Position + Vector2.up * 1.4f, $"{stray.Species.Name}이(가) 따라와요! {(AnimalPlace == Place.Home ? "집" : "카페")}으로 데려가세요", Love);
                     _audio.Play(_audio.Heart);
                     break;
                 case Encounter.Result.Fled:
@@ -423,41 +535,46 @@ namespace StrayCatCafe
             }
         }
 
-        // ---------- 카페 ----------
+        // ---------- 집·카페 ----------
 
-        private void UpdateCafe(float dt, bool frozen)
+        private void UpdateInterior(float dt, bool frozen)
         {
             bool cushion = _eco.Has(Upgrade.Cushion);
-            foreach (AnimalView a in _animals) a.Tick(dt, cushion);
-            _bowlSprite.sprite = _bowlFood > 0 ? _art.BowlFull : _art.BowlEmpty;
+            if (_place == AnimalPlace) foreach (AnimalView a in _animals) a.Tick(dt, cushion);
+            SpriteRenderer bowl = _place == Place.Home ? _homeBowlSprite : _bowlSprite;
+            bowl.sprite = _bowlFood > 0 ? _art.BowlFull : _art.BowlEmpty;
 
-            if (_state == State.Open)
+            if (_place == Place.Cafe)
             {
-                _customerTimer -= dt;
-                if (_customerTimer <= 0f)
+                if (_state == State.Open)
                 {
-                    _customerTimer = CustomerInterval();
-                    SpawnCustomer();
+                    _customerTimer -= dt;
+                    if (_customerTimer <= 0f)
+                    {
+                        _customerTimer = CustomerInterval();
+                        SpawnCustomer();
+                    }
                 }
-            }
-            for (int i = _customers.Count - 1; i >= 0; i--)
-            {
-                Customer c = _customers[i];
-                c.Tick(dt);
-                if (!c.Done) continue;
-                _customers.RemoveAt(i);
-                Destroy(c.gameObject);
+                for (int i = _customers.Count - 1; i >= 0; i--)
+                {
+                    Customer c = _customers[i];
+                    c.Tick(dt);
+                    if (!c.Done) continue;
+                    _customers.RemoveAt(i);
+                    Destroy(c.gameObject);
+                }
             }
 
             if (frozen) return;
-            Vector2Int tile = _cafe.WorldToTile(_playerPos);
-            if (_cafe.IsNextToCounter(tile))
+            CafeMap map = Interior;
+            Vector2Int tile = map.WorldToTile(_playerPos);
+            if (_place == Place.Cafe && map.IsNextToCounter(tile))
             {
                 _prompt = "Space: 운영 메뉴 (업그레이드)";
                 if (Input.GetKeyDown(KeyCode.Space)) OpenPanel(Panel.Office);
                 return;
             }
-            if (_cafe.IsNextToBowl(tile))
+            if (map.IsNextToBowl(tile))
             {
                 _prompt = $"Space: 밥그릇 채우기 (그릇 {_bowlFood}/{CafeEconomy.BowlCapacity}, 사료 {_eco.Kibble}개)";
                 if (Input.GetKeyDown(KeyCode.Space)) FillBowl();
@@ -466,13 +583,16 @@ namespace StrayCatCafe
 
             AnimalView nearest = null;
             float nearestDist = float.MaxValue;
-            foreach (AnimalView a in _animals)
+            if (_place == AnimalPlace)
             {
-                float d = Vector2.Distance(a.Position, _playerPos);
-                if (d < nearestDist)
+                foreach (AnimalView a in _animals)
                 {
-                    nearestDist = d;
-                    nearest = a;
+                    float d = Vector2.Distance(a.Position, _playerPos);
+                    if (d < nearestDist)
+                    {
+                        nearestDist = d;
+                        nearest = a;
+                    }
                 }
             }
             if (nearest != null && nearestDist < 1.3f)
@@ -484,6 +604,10 @@ namespace StrayCatCafe
                     nearest.ShowHeart();
                     _audio.PlayVoice(nearest.Data.Species.Kind);
                 }
+            }
+            else if (_eco.Phase == StoryPhase.Intro)
+            {
+                _prompt = "아래 문으로 나가서 산책해 보세요";
             }
             else if (_animals.Count == 0)
             {
@@ -575,11 +699,8 @@ namespace StrayCatCafe
         {
             _state = State.Summary;
             _panel = Panel.None;
-            if (_inTown)
-            {
-                // 밖에서 하루가 끝나면 따라오던 아이들과 함께 카페로 돌아온다.
-                GoToCafe();
-            }
+            // 밖에서 하루가 끝나면 따라오던 아이들과 함께 집(또는 카페)으로 돌아온다.
+            if (InTown) EnterInterior(AnimalPlace);
             _audio.Play(_audio.DayEnd);
             Save();
         }
@@ -589,7 +710,6 @@ namespace StrayCatCafe
             if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return))
             {
                 _eco.NextDay();
-                _bowlFood = Mathf.Max(_bowlFood, 0);
                 Save();
                 StartDay();
             }
@@ -614,6 +734,8 @@ namespace StrayCatCafe
             _panel = panel;
             _cursor = 0;
         }
+
+        private static int CollectionPages => (SpeciesCatalog.All.Length + CollectionPerPage - 1) / CollectionPerPage;
 
         private void UpdatePanels()
         {
@@ -669,7 +791,7 @@ namespace StrayCatCafe
                 UpgradeInfo info = CafeEconomy.Upgrades[_cursor];
                 ok = _eco.TryBuyUpgrade(info.Key);
                 what = info.Name;
-                if (ok && info.Key == Upgrade.Tower) _towerSprite.sprite = _art.BigCatTower;
+                if (ok && info.Key == Upgrade.Tower && _towerSprite != null) _towerSprite.sprite = _art.BigCatTower;
             }
 
             if (ok)
@@ -689,7 +811,7 @@ namespace StrayCatCafe
 
         private void UpdateCamera()
         {
-            TileGrid grid = _inTown ? (TileGrid)_town : _cafe;
+            TileGrid grid = Grid;
             float halfH = _cam.orthographicSize;
             float halfW = halfH * _cam.aspect;
             Vector2 min = grid.Origin, max = grid.Origin + new Vector2(grid.Width, grid.Height);
@@ -704,7 +826,7 @@ namespace StrayCatCafe
         private void ShowBanner(string text)
         {
             _banner = text;
-            _bannerTimer = 5f;
+            _bannerTimer = 7f;
         }
 
         private void UpdateTexts(float dt)
@@ -755,9 +877,12 @@ namespace StrayCatCafe
 
             if (_bannerTimer > 0f && _state != State.Summary)
             {
-                var r = new Rect(Screen.width / 2f - 300f, 70f, 600f, 40f);
+                string text = $"<b>{_banner}</b>";
+                float width = Mathf.Min(680f, Screen.width - 40f);
+                float height = _labelStyle.CalcHeight(new GUIContent(text), width - 20f) + 14f;
+                var r = new Rect(Screen.width / 2f - width / 2f, 70f, width, height);
                 GUI.Box(r, "", _panelStyle);
-                GUI.Label(new Rect(r.x + 10f, r.y + 8f, r.width - 20f, 30f), $"<b>{_banner}</b>", _labelStyle);
+                GUI.Label(new Rect(r.x + 10f, r.y + 6f, r.width - 20f, height - 10f), text, _labelStyle);
             }
 
             if (!string.IsNullOrEmpty(_prompt) && _panel == Panel.None && _state != State.Summary)
@@ -776,11 +901,14 @@ namespace StrayCatCafe
             for (int i = 0; i < SnackCatalog.All.Length; i++)
             {
                 string name = SnackCatalog.All[i].Name;
-                snacks += i == _selectedSnack && _inTown ? $"<b>[{name} {_eco.Snacks[i]}]</b> " : $"{name} {_eco.Snacks[i]}  ";
+                snacks += i == _selectedSnack && InTown ? $"<b>[{name} {_eco.Snacks[i]}]</b> " : $"{name} {_eco.Snacks[i]}  ";
             }
-            string where = _inTown ? "동네" : "카페";
+            string where = _place switch { Place.Home => "집", Place.Cafe => "카페", _ => "동네" };
             string line1 = $"<b>{_eco.Day}일째</b>  {h:00}:{m:00}  ·  {where}  ·  <b>{_eco.Money:N0}원</b>";
-            string line2 = $"식구 {_eco.Animals.Count}/{_eco.Capacity}  (고양이 {_eco.Count(AnimalKind.Cat)} · 강아지 {_eco.Count(AnimalKind.Dog)})  ·  매력 {_eco.Charm:0.0}  ·  그릇 {_bowlFood}/{CafeEconomy.BowlCapacity}  사료 {_eco.Kibble}";
+            string progress = _eco.CafeOpen
+                ? $"매력 {_eco.Charm:0.0}"
+                : $"카페 열기까지 {Mathf.Min(_eco.Animals.Count, CafeEconomy.AnimalsToOpenCafe)}/{CafeEconomy.AnimalsToOpenCafe}마리";
+            string line2 = $"식구 {_eco.Animals.Count}/{_eco.Capacity}  (고양이 {_eco.Count(AnimalKind.Cat)} · 강아지 {_eco.Count(AnimalKind.Dog)})  ·  {progress}  ·  그릇 {_bowlFood}/{CafeEconomy.BowlCapacity}  사료 {_eco.Kibble}";
             string line3 = $"간식: {snacks}";
             if (_followers.Count > 0) line3 += $"   ♥ 따라오는 아이 {_followers.Count}";
 
@@ -801,10 +929,10 @@ namespace StrayCatCafe
             {
                 float alpha = t.Age < TextSeconds ? 1f : 1f - (t.Age - TextSeconds) / TextSeconds;
                 _floatStyle.normal.textColor = new Color(t.Color.r, t.Color.g, t.Color.b, alpha);
-                GUI.Label(WorldRect(t.Pos, 420f, 26f), t.Text, _floatStyle);
+                GUI.Label(WorldRect(t.Pos, 520f, 26f), t.Text, _floatStyle);
             }
 
-            if (!_inTown) return;
+            if (!InTown) return;
             foreach (StrayView s in _strays)
             {
                 if (s.Current != StrayView.State.Hiding) continue;
@@ -848,7 +976,7 @@ namespace StrayCatCafe
                 GUI.Label(new Rect(r.x + 16f, y, r.width - 32f, 26f), i == _cursor ? $"<b>{line}</b>" : line, _labelStyle);
                 y += 30f;
             }
-            string kibble = $"{(_cursor == SnackCatalog.All.Length ? "▶ " : "   ")}사료 {CafeEconomy.KibbleBundle}개  {CafeEconomy.KibblePrice * CafeEconomy.KibbleBundle:N0}원   보유 {_eco.Kibble}   카페 밥그릇에 채웁니다";
+            string kibble = $"{(_cursor == SnackCatalog.All.Length ? "▶ " : "   ")}사료 {CafeEconomy.KibbleBundle}개  {CafeEconomy.KibblePrice * CafeEconomy.KibbleBundle:N0}원   보유 {_eco.Kibble}   밥그릇에 채웁니다";
             GUI.Label(new Rect(r.x + 16f, y + 6f, r.width - 32f, 26f), _cursor == SnackCatalog.All.Length ? $"<b>{kibble}</b>" : kibble, _labelStyle);
             GUI.Label(new Rect(r.x + 16f, r.y + r.height - 48f, r.width - 32f, 40f),
                 "좋아하는 간식을 주면 친밀도가 1.8배로 오릅니다. 도감(Tab)에서 확인하세요.", _smallStyle);
@@ -872,8 +1000,6 @@ namespace StrayCatCafe
             GUI.Label(new Rect(r.x + 16f, r.y + r.height - 70f, r.width - 32f, 60f),
                 $"입장료 {CafeEconomy.EntryFee:N0}원. 손님이 좋아하는 종류의 아이가 기분 좋게(50 이상) 있으면 한 마리마다 팁 {CafeEconomy.TipPerAnimal:N0}원 (최대 5마리).", _smallStyle);
         }
-
-        private static int CollectionPages => (SpeciesCatalog.All.Length + CollectionPerPage - 1) / CollectionPerPage;
 
         private void DrawCollection()
         {
@@ -910,14 +1036,15 @@ namespace StrayCatCafe
             DayReport rep = _eco.Report;
             Rect r = PanelRect(520f, 330f);
             GUI.Box(r, "", _panelStyle);
-            GUI.Label(new Rect(r.x + 16f, r.y + 10f, r.width, 30f), $"{rep.Day}일째 영업 끝", _titleStyle);
+            GUI.Label(new Rect(r.x + 16f, r.y + 10f, r.width, 30f), _eco.CafeOpen ? $"{rep.Day}일째 영업 끝" : $"{rep.Day}일째 하루 끝", _titleStyle);
             float y = r.y + 50f;
             void Line(string text)
             {
                 GUI.Label(new Rect(r.x + 16f, y, r.width - 32f, 26f), text, _labelStyle);
                 y += 28f;
             }
-            Line($"손님 {rep.Visitors}명  ·  매출 {rep.Income:N0}원 (팁 {rep.Tips:N0}원)");
+            if (_eco.CafeOpen) Line($"손님 {rep.Visitors}명  ·  매출 {rep.Income:N0}원 (팁 {rep.Tips:N0}원)");
+            else Line($"카페 열기까지 {Mathf.Max(0, CafeEconomy.AnimalsToOpenCafe - _eco.Animals.Count)}마리 더 필요해요");
             Line($"현재 자금 {_eco.Money:N0}원  ·  식구 {_eco.Animals.Count}/{_eco.Capacity}마리");
             Line(rep.NewAnimals.Count > 0 ? $"새 식구: {string.Join(", ", rep.NewAnimals)}" : "새 식구: 없음");
             float avg = 0f;

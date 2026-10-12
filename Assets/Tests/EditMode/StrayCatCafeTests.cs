@@ -56,6 +56,41 @@ namespace StrayCatCafe.Tests
         }
     }
 
+    public class HomeMapTests
+    {
+        private CafeMap _home;
+
+        [SetUp]
+        public void SetUp() => _home = new CafeMap(CafeMap.HomeLayout);
+
+        [Test]
+        public void Layout_RowsAreSameWidth()
+        {
+            foreach (string row in CafeMap.HomeLayout) Assert.AreEqual(CafeMap.HomeLayout[0].Length, row.Length);
+        }
+
+        [Test]
+        public void Home_HasBedBowlAndDoorButNoTowerOrSeats()
+        {
+            Assert.AreEqual(1, _home.Beds.Count);
+            Assert.AreEqual(2, _home.Doors.Count);
+            Assert.AreEqual(0, _home.Seats.Count);
+            Assert.IsFalse(_home.HasTower);
+            Assert.IsFalse(_home.IsWalkable(_home.Bowl));
+            Assert.IsFalse(_home.IsWalkable(new Vector2Int(1, 6)), "사람 침대");
+            Assert.IsTrue(_home.IsWalkable(new Vector2Int(5, 4)), "러그");
+            Assert.IsTrue(_home.Floor.Count > 20);
+        }
+
+        [Test]
+        public void FindPath_ReachesBedAndBowlFromDoor()
+        {
+            Assert.IsNotNull(_home.FindPath(_home.Spawn, _home.Beds[0]));
+            Assert.IsNotNull(_home.FindPath(_home.Spawn, _home.BowlSpot));
+            foreach (Vector2Int f in _home.Floor) Assert.IsNotNull(_home.FindPath(_home.Spawn, f), f.ToString());
+        }
+    }
+
     public class TownMapTests
     {
         private TownMap _map;
@@ -70,12 +105,41 @@ namespace StrayCatCafe.Tests
         }
 
         [Test]
-        public void Layout_HasDoorShopAndHidingSpots()
+        public void Layout_HasDoorsShopPondAndHidingSpots()
         {
             Assert.AreEqual(2, _map.CafeDoors.Count);
+            Assert.AreEqual(1, _map.HomeDoors.Count);
             Assert.AreEqual(2, _map.Shop.Count);
-            Assert.IsTrue(_map.HidingSpots.Count >= 20, $"숨을 곳 {_map.HidingSpots.Count}곳");
+            Assert.IsTrue(_map.HidingSpots.Count >= 30, $"숨을 곳 {_map.HidingSpots.Count}곳");
             Assert.IsTrue(_map.IsWalkable(_map.ExitSpot));
+            Assert.IsTrue(_map.IsWalkable(_map.HomeExitSpot));
+            Assert.IsTrue(_map.IsWalkable(_map.HomeDoors[0]));
+            Assert.IsTrue(_map.IsHomeDoor(_map.HomeDoors[0]));
+        }
+
+        [Test]
+        public void Pond_IsNotWalkableButItsShoreHidesAnimals()
+        {
+            int water = 0, shore = 0;
+            for (int y = 0; y < _map.Height; y++)
+                for (int x = 0; x < _map.Width; x++)
+                {
+                    var p = new Vector2Int(x, y);
+                    if (!_map.IsWater(p)) continue;
+                    water++;
+                    Assert.IsFalse(_map.IsWalkable(p));
+                    foreach (Vector2Int q in new[] { p + Vector2Int.up, p + Vector2Int.down, p + Vector2Int.left, p + Vector2Int.right })
+                        if (_map.HidingSpots.Contains(q)) shore++;
+                }
+            Assert.IsTrue(water >= 15, $"물 {water}칸");
+            Assert.IsTrue(shore > 0, "물가에 숨을 곳이 있어야 한다");
+        }
+
+        [Test]
+        public void HomeExit_ReachesCafeDoorAndShop()
+        {
+            Assert.IsNotNull(_map.FindPath(_map.HomeExitSpot, _map.ExitSpot));
+            Assert.IsNotNull(_map.FindPath(_map.HomeExitSpot, _map.Shop[0] + Vector2Int.down));
         }
 
         [Test]
@@ -230,12 +294,55 @@ namespace StrayCatCafe.Tests
             CafeEconomy loaded = CafeEconomy.FromJson(eco.ToJson());
             Assert.AreEqual(eco.Money, loaded.Money);
             Assert.AreEqual(2, loaded.Day);
+            Assert.AreEqual(eco.Phase, loaded.Phase);
             Assert.AreEqual(1, loaded.Snacks[3]);
             Assert.IsTrue(loaded.Has(Upgrade.Sign));
             Assert.AreEqual(1, loaded.Animals.Count);
             Assert.AreEqual(6, loaded.Animals[0].SpeciesIndex);
             Assert.AreEqual(42f, loaded.Animals[0].Happiness);
             Assert.IsTrue(loaded.Seen[6]);
+        }
+
+        [Test]
+        public void Story_StartsAtHomeAndOpensCafeWithThreeAnimals()
+        {
+            var eco = new CafeEconomy();
+            var rng = new System.Random(9);
+            Assert.AreEqual(StoryPhase.Intro, eco.Phase);
+            Assert.IsFalse(eco.CafeOpen);
+            Assert.AreEqual(CafeEconomy.HomeCapacity, eco.Capacity);
+            Assert.IsFalse(eco.TryOpenCafe());
+
+            eco.Advance(StoryPhase.FirstCat);
+            eco.Adopt(Animal.Create(SpeciesCatalog.All[16], rng));
+            eco.Advance(StoryPhase.Collecting);
+            eco.Advance(StoryPhase.FirstCat); // 뒤로는 가지 않는다
+            Assert.AreEqual(StoryPhase.Collecting, eco.Phase);
+            Assert.IsFalse(eco.CanOpenCafe);
+
+            eco.Adopt(Animal.Create(SpeciesCatalog.All[0], rng));
+            eco.Adopt(Animal.Create(SpeciesCatalog.All[8], rng));
+            Assert.IsTrue(eco.Full, "집은 3마리까지");
+            Assert.IsTrue(eco.CanOpenCafe);
+            Assert.IsTrue(eco.TryOpenCafe());
+            Assert.IsTrue(eco.CafeOpen);
+            Assert.AreEqual(CafeEconomy.BaseCapacity, eco.Capacity);
+            Assert.IsFalse(eco.Full);
+
+            CafeEconomy loaded = CafeEconomy.FromJson(eco.ToJson());
+            Assert.AreEqual(StoryPhase.CafeOpen, loaded.Phase);
+        }
+
+        [Test]
+        public void FromJson_OldSaveWithAnimalsCountsAsCafeOpen()
+        {
+            var eco = new CafeEconomy();
+            eco.Adopt(Animal.Create(SpeciesCatalog.All[1], new System.Random(1)));
+            string json = eco.ToJson().Replace($"\"version\":{CafeEconomy.SaveVersion}", "\"version\":0");
+            Assert.IsTrue(json.Contains("\"version\":0"), json);
+            CafeEconomy loaded = CafeEconomy.FromJson(json);
+            Assert.AreEqual(StoryPhase.CafeOpen, loaded.Phase);
+            Assert.AreEqual(StoryPhase.Intro, CafeEconomy.FromJson(eco.ToJson()).Phase, "새 형식 저장은 단계를 그대로 둔다");
         }
 
         [Test]

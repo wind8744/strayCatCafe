@@ -44,8 +44,8 @@ namespace StrayCatCafe
 
         public CafeArt()
         {
-            foreach (char c in "#w.DkcbtB") _cafeTiles[c] = BuildCafeTile(c);
-            foreach (char c in "TgsrBhHcCDSnl") _townTiles[c] = BuildTownTile(c);
+            foreach (char c in "#w.DkcbtBrh") _cafeTiles[c] = BuildCafeTile(c);
+            foreach (char c in "TgsrBwhHEcCDSnl") _townTiles[c] = BuildTownTile(c);
             Tree = BuildTree();
             Lamp = BuildLamp();
             CatTower = BuildTower(false);
@@ -146,6 +146,21 @@ namespace StrayCatCafe
                     cv.Rect(5, 4, 3, 2, EyeWhite);
                     cv.Rect(3, 12, 10, 2, C(214, 120, 136));
                     break;
+                case 'r':
+                    Floor();
+                    cv.Rect(0, 0, Tile, Tile, C(196, 84, 84));
+                    cv.Rect(1, 1, 14, 14, C(222, 110, 100));
+                    cv.Rect(3, 3, 10, 10, C(196, 84, 84));
+                    cv.Rect(5, 5, 6, 6, C(240, 200, 160));
+                    break;
+                case 'h':
+                    Floor();
+                    cv.Rect(0, 0, Tile, Tile, C(130, 90, 60));
+                    cv.Rect(1, 1, 14, 14, C(100, 140, 210));
+                    cv.Rect(1, 1, 14, 5, C(250, 246, 236));
+                    cv.Rect(2, 7, 12, 1, C(80, 116, 180));
+                    cv.Rect(2, 11, 12, 1, C(80, 116, 180));
+                    break;
                 case 'B':
                     Floor();
                     cv.Rect(1, 3, 14, 11, C(150, 110, 70));
@@ -224,6 +239,21 @@ namespace StrayCatCafe
                     break;
                 case 'H':
                     Window(houseWall);
+                    break;
+                case 'E':
+                    cv.Rect(0, 0, Tile, Tile, houseWall);
+                    cv.Rect(2, 0, 12, 14, C(110, 70, 46));
+                    cv.Rect(3, 0, 10, 12, C(150, 98, 66));
+                    cv.Rect(5, 2, 6, 3, C(170, 214, 240));
+                    cv.Set(11, 8, C(240, 200, 80));
+                    break;
+                case 'w':
+                    cv.Rect(0, 0, Tile, Tile, C(96, 164, 220));
+                    cv.Rect(2, 3, 5, 1, C(170, 214, 240));
+                    cv.Rect(9, 9, 5, 1, C(170, 214, 240));
+                    cv.Rect(5, 12, 3, 1, C(170, 214, 240));
+                    cv.Rect(11, 1, 2, 1, C(70, 130, 190));
+                    cv.Rect(1, 8, 2, 1, C(70, 130, 190));
                     break;
                 case 'c':
                     Roof(cafeRoof, cafeRoofDark);
