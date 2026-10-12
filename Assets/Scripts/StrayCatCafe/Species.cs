@@ -27,9 +27,12 @@ namespace StrayCatCafe
         public readonly Color32 Mark;
         public readonly Color32 Belly;
         public readonly string Note;
+        /// <summary>장모종이면 털을 더 풍성하게 그립니다.</summary>
+        public readonly bool LongHair;
 
         public Species(int index, string name, AnimalKind kind, Rarity rarity, Personality personality,
-            CoatPattern pattern, int charm, int favoriteSnack, Color32 body, Color32 mark, Color32 belly, string note)
+            CoatPattern pattern, int charm, int favoriteSnack, Color32 body, Color32 mark, Color32 belly, string note,
+            bool longHair = false)
         {
             Index = index;
             Name = name;
@@ -43,6 +46,7 @@ namespace StrayCatCafe
             Mark = mark;
             Belly = belly;
             Note = note;
+            LongHair = longHair;
         }
 
         public string KindName => Kind == AnimalKind.Cat ? "고양이" : "강아지";
@@ -101,6 +105,29 @@ namespace StrayCatCafe
                 C(222, 186, 112), C(200, 160, 90), C(240, 216, 160), "모두의 친구. 카페의 스타."),
             new Species(15, "달마시안", AnimalKind.Dog, Rarity.Rare, Personality.Playful, CoatPattern.Spots, 5, 3,
                 C(248, 248, 246), C(40, 40, 46), C(248, 248, 246), "검은 점박이. 소방서 마스코트."),
+            // 저장 호환을 위해 새 품종은 뒤에만 덧붙입니다.
+            new Species(16, "코리안숏헤어", AnimalKind.Cat, Rarity.Common, Personality.Curious, CoatPattern.Calico, 3, 0,
+                C(236, 236, 230), C(120, 120, 124), C(246, 246, 242), "한국 토종 고양이. 흰 바탕에 회색 얼룩."),
+            new Species(17, "페르시안", AnimalKind.Cat, Rarity.Rare, Personality.Lazy, CoatPattern.Plain, 6, 2,
+                C(246, 236, 220), C(220, 206, 186), C(250, 244, 232), "납작한 얼굴에 긴 털. 하루 종일 우아하게 쉰다.", true),
+            new Species(18, "먼치킨", AnimalKind.Cat, Rarity.Uncommon, Personality.Playful, CoatPattern.Tuxedo, 4, 2,
+                C(230, 180, 110), C(250, 246, 236), C(250, 246, 236), "다리가 짧아 뒤뚱뒤뚱 걷는다."),
+            new Species(19, "스코티시폴드", AnimalKind.Cat, Rarity.Uncommon, Personality.Lazy, CoatPattern.Plain, 4, 1,
+                C(160, 160, 166), C(130, 130, 136), C(200, 200, 204), "접힌 귀와 동그란 얼굴."),
+            new Species(20, "메인쿤", AnimalKind.Cat, Rarity.Rare, Personality.Curious, CoatPattern.Stripes, 6, 1,
+                C(150, 110, 70), C(96, 66, 40), C(220, 200, 170), "고양이 중 가장 크다. 털이 사자 갈기 같다.", true),
+            new Species(21, "벵갈", AnimalKind.Cat, Rarity.Uncommon, Personality.Playful, CoatPattern.Spots, 5, 0,
+                C(228, 176, 100), C(90, 60, 30), C(246, 228, 196), "표범 무늬. 물놀이를 좋아한다."),
+            new Species(22, "랙돌", AnimalKind.Cat, Rarity.Uncommon, Personality.Lazy, CoatPattern.Points, 5, 2,
+                C(246, 240, 230), C(120, 100, 90), C(250, 246, 240), "안으면 인형처럼 축 늘어진다.", true),
+            new Species(23, "브리티시숏헤어", AnimalKind.Cat, Rarity.Uncommon, Personality.Shy, CoatPattern.Plain, 4, 1,
+                C(120, 130, 150), C(96, 106, 126), C(150, 160, 180), "둥글둥글한 회청색 고양이."),
+            new Species(24, "스핑크스", AnimalKind.Cat, Rarity.Rare, Personality.Curious, CoatPattern.Plain, 5, 1,
+                C(226, 180, 170), C(200, 150, 140), C(240, 200, 190), "털이 없어 늘 따뜻한 곳을 찾는다."),
+            new Species(25, "노르웨이숲", AnimalKind.Cat, Rarity.Uncommon, Personality.Shy, CoatPattern.Stripes, 5, 0,
+                C(110, 110, 116), C(60, 60, 66), C(236, 236, 232), "북유럽의 숲 고양이. 추위에 강하다.", true),
+            new Species(26, "아비시니안", AnimalKind.Cat, Rarity.Uncommon, Personality.Playful, CoatPattern.Plain, 4, 0,
+                C(200, 140, 80), C(150, 90, 50), C(230, 190, 140), "날씬하고 활동적인 황갈색 고양이."),
         };
 
         public static readonly string[] Names =

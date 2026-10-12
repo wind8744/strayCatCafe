@@ -71,7 +71,8 @@ namespace StrayCatCafe
         private float _hour, _customerTimer, _strayTimer;
         private int _seed;
         private Panel _panel;
-        private int _cursor, _selectedSnack = 1;
+        private int _cursor, _selectedSnack = 1, _collectionPage;
+        private const int CollectionPerPage = 16;
         private string _prompt, _banner;
         private float _bannerTimer;
         private GUIStyle _panelStyle, _labelStyle, _titleStyle, _floatStyle, _smallStyle;
@@ -629,6 +630,14 @@ namespace StrayCatCafe
                 return;
             }
 
+            if (_panel == Panel.Collection)
+            {
+                int pages = CollectionPages;
+                if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D)) _collectionPage = (_collectionPage + 1) % pages;
+                if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A)) _collectionPage = (_collectionPage + pages - 1) % pages;
+                return;
+            }
+
             int count = _panel switch
             {
                 Panel.Shop => SnackCatalog.All.Length + 1,
@@ -864,19 +873,25 @@ namespace StrayCatCafe
                 $"입장료 {CafeEconomy.EntryFee:N0}원. 손님이 좋아하는 종류의 아이가 기분 좋게(50 이상) 있으면 한 마리마다 팁 {CafeEconomy.TipPerAnimal:N0}원 (최대 5마리).", _smallStyle);
         }
 
+        private static int CollectionPages => (SpeciesCatalog.All.Length + CollectionPerPage - 1) / CollectionPerPage;
+
         private void DrawCollection()
         {
             Rect r = PanelRect(760f, 460f);
             GUI.Box(r, "", _panelStyle);
             int seen = 0;
             foreach (bool b in _eco.Seen) if (b) seen++;
-            GUI.Label(new Rect(r.x + 16f, r.y + 10f, r.width, 30f), $"도감  {seen}/{SpeciesCatalog.All.Length}", _titleStyle);
+            int pages = CollectionPages;
+            _collectionPage = Mathf.Clamp(_collectionPage, 0, pages - 1);
+            GUI.Label(new Rect(r.x + 16f, r.y + 10f, r.width, 30f), $"도감  {seen}/{SpeciesCatalog.All.Length}   <size=14>({_collectionPage + 1}/{pages} 쪽, ←→ 넘기기)</size>", _titleStyle);
             GUI.Label(new Rect(r.x + 16f, r.y + 40f, r.width - 32f, 24f), "가까이서 본 아이는 이름이, 데려온 아이는 좋아하는 간식이 기록됩니다. Tab/Esc 닫기", _smallStyle);
             float colW = (r.width - 32f) / 2f;
-            for (int i = 0; i < SpeciesCatalog.All.Length; i++)
+            int first = _collectionPage * CollectionPerPage;
+            for (int i = first; i < SpeciesCatalog.All.Length && i < first + CollectionPerPage; i++)
             {
                 Species s = SpeciesCatalog.All[i];
-                int col = i / 8, row = i % 8;
+                int slot = i - first;
+                int col = slot / 8, row = slot % 8;
                 var cell = new Rect(r.x + 16f + col * colW, r.y + 72f + row * 44f, colW - 8f, 42f);
                 int owned = _eco.OwnedCount(i);
                 string line;

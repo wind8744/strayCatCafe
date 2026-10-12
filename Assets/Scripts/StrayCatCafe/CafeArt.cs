@@ -566,6 +566,7 @@ namespace StrayCatCafe
                 var cv = new PixelCanvas(16, 14);
                 cv.Blit(rows, palette, 0, 0);
                 ApplyPattern(cv, s, rows, asleep);
+                if (s.LongHair) ApplyFluff(cv, s, asleep);
                 return cv.ToSprite(new Vector2(0.5f, 0f));
             }
 
@@ -575,6 +576,27 @@ namespace StrayCatCafe
                 Walk = Build(cat ? CatWalk : DogWalk, false),
                 Sleep = Build(cat ? CatSleep : DogSleep, true),
             };
+        }
+
+        /// <summary>장모종: 가슴·등·꼬리 둘레에 털 뭉치를 덧그립니다.</summary>
+        private static void ApplyFluff(PixelCanvas cv, Species s, bool asleep)
+        {
+            Color32 fur = s.Body;
+            Color32 shade = PixelCanvas.Mul(s.Body, 0.85f);
+            void Tuft(int x, int y, Color32 c)
+            {
+                if (cv.Get(x, y).a == 0) cv.Set(x, y, c);
+            }
+            if (asleep)
+            {
+                Tuft(1, 9, fur); Tuft(1, 10, shade); Tuft(1, 11, fur);
+                Tuft(2, 12, fur); Tuft(13, 12, fur); Tuft(14, 11, fur);
+                return;
+            }
+            Tuft(2, 7, fur); Tuft(2, 8, shade); Tuft(2, 9, fur); Tuft(1, 8, fur);
+            Tuft(15, 7, fur); Tuft(15, 8, shade); Tuft(15, 9, fur);
+            Tuft(14, 2, fur); Tuft(15, 3, shade); Tuft(13, 3, fur);
+            Tuft(1, 3, fur); Tuft(1, 4, shade); Tuft(9, 3, fur);
         }
 
         private static bool IsBody(string[] rows, int x, int y) =>
