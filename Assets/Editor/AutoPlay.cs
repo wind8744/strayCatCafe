@@ -21,12 +21,16 @@ public static class AutoPlay
     private static int _seriesShot;
     private static float _nextSeriesTime;
 
+    private static double _nextPoll;
+
     static AutoPlay()
     {
         if (SessionState.GetBool(ShotPendingKey, false))
         {
             EditorApplication.update += ScreenshotWhenReady;
         }
+        // 에디터가 켜진 채로도 요청 파일을 1초마다 확인해, 포커스나 재컴파일 없이 재생을 시작할 수 있게 한다.
+        EditorApplication.update += PollRequest;
 
         if (!File.Exists(RequestPath)) return;
         if (EditorApplication.isPlayingOrWillChangePlaymode)
@@ -44,6 +48,14 @@ public static class AutoPlay
         if (change != PlayModeStateChange.EnteredEditMode) return;
         EditorApplication.playModeStateChanged -= OnPlayModeChanged;
         EditorApplication.delayCall += ProcessRequest;
+    }
+
+    private static void PollRequest()
+    {
+        if (EditorApplication.timeSinceStartup < _nextPoll) return;
+        _nextPoll = EditorApplication.timeSinceStartup + 1.0;
+        if (!File.Exists(RequestPath) || EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling) return;
+        ProcessRequest();
     }
 
     private static void ProcessRequest()

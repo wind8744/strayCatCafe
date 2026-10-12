@@ -781,8 +781,9 @@ namespace StrayCatCafe
             GUI.Label(new Rect(r.x + 12f, r.y + 30f, r.width - 24f, 24f), line2, _smallStyle);
             GUI.Label(new Rect(r.x + 12f, r.y + 54f, r.width - 24f, 24f), line3, _smallStyle);
 
-            GUI.Label(new Rect(Screen.width - 330f, 10f, 320f, 24f),
-                $"Tab 도감 · M 음악 {(_audio.MusicOn ? "켬" : "끔")} · 이동 WASD/방향키 · Shift 살금살금", _smallStyle);
+            string hint = $"Tab 도감 · M 음악 {(_audio.MusicOn ? "켬" : "끔")} · 이동 WASD/방향키 · Shift 살금살금";
+            if (Screen.width >= 1000) GUI.Label(new Rect(Screen.width - 330f, 10f, 320f, 24f), hint, _smallStyle);
+            else GUI.Label(new Rect(r.x + 12f, r.y + r.height + 2f, r.width - 24f, 24f), hint, _smallStyle);
         }
 
         private void DrawWorldOverlays()
